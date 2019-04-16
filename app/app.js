@@ -5,7 +5,7 @@ var Plume = Plume || {};
 Plume = (function () {
     'use strict';
 
-    const popupUri = window.origin + '/common/popup.html'
+    const popupUri = window.origin + '/popup.html'
 
     var config = Plume.config || {};
     var appURL = window.location.origin+window.location.pathname;
@@ -263,7 +263,7 @@ Plume = (function () {
     var login = function() {
         // Get the current user
         solid.auth
-        .popupLogin()
+        .popupLogin({ popupUri })
         .then((session) => {
            if (session) {
              gotWebID(session.webId, true)
