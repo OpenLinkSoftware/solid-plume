@@ -683,6 +683,19 @@ nav#global-nav img {
     top: 7px;
 }
 
+
+#uid-icon {
+    border: 0;
+    display: block;
+    line-height: 1;
+    left: 1.5em;
+    top: 1.0em;
+    padding: 0;
+    position: relative;
+    text-align: center;
+    z-index: 8;
+}
+
 /* Menu button */
 
 #menu-button {

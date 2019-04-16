@@ -24,6 +24,7 @@
             <li class="login"><a href="#" onclick="Plume.login()">Login</a></li>
             <li class="logout hidden"><a href="#" onclick="Plume.logout()">Logout</a></li>
             <!-- <li class=""><a href="#" onclick="Plume.signup()">Signup</a></li> -->
+
           </ul>
         </nav>
         <button aria-controls="global-nav" aria-haspopup="true" tabindex="1" id="menu-button">
@@ -32,7 +33,12 @@
           </span>
         </button>
 
+           <a id="logged-href" href="" title=""  style="display:none" >
+             <img id="uid-icon" src="img/uid.png">
+           </a>
+
         <div id="main" class="main content pure-u-1 pure-u-md-3-5">
+
             <!-- Blog title -->
             <div class="blog-info header center-text">
                 <a href="." class="no-decoration dark">
@@ -42,6 +48,11 @@
                     <div class="separator"></div>
                 </a>
             </div>
+            <div class="startWrite center-text hidden">
+                <h2><a class="action-button" href="#" onclick="Plume.showEditor()" title="Start writing">Start writing!</a></h2>
+            </div>
+
+
             <!-- Loading animation -->
             <div class="loading center-text hidden">
                 <div class="loadingbox"></div>
@@ -93,11 +104,14 @@
 
             <!-- Init -->
             <div class="init center-text hidden">
-                <h1>Could not find a blog URL.</h1>
+                <h1>Could not find any blog's posts.</h1>
+                <h1>You have to Login for write a new post.</h1>
+<!--
                 <p>If you would like, Plume can attempt to find your blog, or help you create one.</p>
                 <p>Do you use WebID? <a href="#" onclick="Plume.toggleOverlay('#webid-info')">[<span class="fa fa-question"></span>]</a></p>
                 <a class="action-button" href="#" onclick="Plume.login()" title="I use WebID">Yes, I use WebID</a>
                 <a class="action-button" href="#" onclick="Plume.signup()" title="Sign up for a WebID">No, I need a WebID</a>
+-->
             </div>
 
             <!-- Errors -->
@@ -153,7 +167,8 @@
 <script src="js/moment.min.js"></script>
 <script src="js/dropdown.js"></script>
 <script src="js/rdflib.min.js"></script>
-<script src="app/solid.js"></script>
+<script src="/common/js/solid-auth-client.bundle.js"></script>
+<script src="app/solidplume.js"></script>
 <script src="app/app.js"></script>
 </body>
 </html>

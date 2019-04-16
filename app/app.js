@@ -5,13 +5,18 @@ var Plume = Plume || {};
 Plume = (function () {
     'use strict';
 
+    const popupUri = window.origin + '/common/popup.html'
+
     var config = Plume.config || {};
     var appURL = window.location.origin+window.location.pathname;
 
     // RDF
-    var PROXY = "https://databox.me/,proxy?uri={uri}";
+    var PROXY = window.origin + '/proxy?uri={uri}';
     var TIMEOUT = 5000;
 
+    SolidPlume.config.proxyUrl = PROXY;
+    SolidPlume.config.timeout = TIMEOUT;
+    SolidPlume.fetch = solid.auth.fetch;
     $rdf.Fetcher.crossSiteProxyTemplate = PROXY;
     // common vocabs
     var RDF = $rdf.Namespace("http://www.w3.org/1999/02/22-rdf-syntax-ns#");
@@ -22,6 +27,26 @@ Plume = (function () {
     var SIOC = $rdf.Namespace("http://rdfs.org/sioc/ns#");
     var SOLID = $rdf.Namespace("http://www.w3.org/ns/solid/terms#");
 
+    // common vocabs
+    var OWL = $rdf.Namespace("http://www.w3.org/2002/07/owl#");
+    var PIM = $rdf.Namespace("http://www.w3.org/ns/pim/space#");
+
+
+  function render(session) {
+    const loggedHref = document.getElementById('logged-href')
+    if (session && session.webId) {
+      loggedHref.style.display = 'initial'
+      loggedHref.href = session.webId
+      loggedHref.title = session.webId
+    } else {
+      loggedHref.style.display = 'none'
+      loggedHref.href = ''
+      loggedHref.title = ''
+    }
+  }
+    
+    
+    
     // init markdown editor
     var editor = new SimpleMDE({
         status: false,
@@ -80,14 +105,26 @@ Plume = (function () {
         // set config params
         applyConfig(configData);
 
+    // Render the session state
+    solid.auth
+      .currentSession()
+      .then((session) => {
+         if (session) {
+           gotWebID(session.webId, false)
+         }
+         return session
+      })
+      .then((session) => {render(session)})
+
+
         // try to load authors
         loadLocalAuthors();
 
         // Add online/offline events
-        Solid.status.onOffline(function(){
+        SolidPlume.status.onOffline(function(){
             notify('info', "You are no longer connected to the internet.", 3000);
         });
-        Solid.status.onOnline(function(){
+        SolidPlume.status.onOnline(function(){
             notify('info', "And we're back!");
         });
         // Init growl-like notifications
@@ -184,11 +221,11 @@ Plume = (function () {
 
     // Init data container
     var initContainer = function(url) {
-        Solid.web.head(url).then(
+        SolidPlume.web.head(url).then(
             function(container) {
                 // create data container for posts if it doesn't exist
                 if (!container.exists && container.xhr.status < 500) {
-                    Solid.web.post(appURL, config.defaultPath, null, true).then(
+                    SolidPlume.web.post(appURL, config.defaultPath, null, true).then(
                         function(res) {
                             if (res.url && res.url.length > 0) {
                                 config.postsURL = res.url;
@@ -225,18 +262,23 @@ Plume = (function () {
     // Log user in
     var login = function() {
         // Get the current user
-        Solid.auth.login().then(function(webid){
-            gotWebID(webid);
-        }).catch(function(err) {
-            console.log(err);
+        solid.auth
+        .popupLogin()
+        .then((session) => {
+           if (session) {
+             gotWebID(session.webId, true)
+           }
+        }).catch((err) => {
+            console.log("Err", err);
             notify('error', "Authentication failed");
             showError(err);
         });
+
     };
     // Signup for a WebID and space
     var signup = function() {
-        Solid.auth.signup().then(function(webid) {
-            gotWebID(webid);
+        SolidPlume.auth.signup().then(function(webid) {
+            gotWebID(webid, true);
         }).catch(function(err) {
             console.log("Err", err);
             notify('error', "Authentication failed");
@@ -248,17 +290,23 @@ Plume = (function () {
         user = defaultUser;
         clearLocalStorage();
         showLogin();
-        window.location.reload();
+        solid.auth
+          .logout()
+          .then(() => {
+            window.location.reload();
+          })
+
     };
 
     // set the logged in user
-    var gotWebID = function(webid) {
+    var gotWebID = function(webid, reload) {
         // set WebID
         user.webid = webid;
         user.authenticated = true;
         hideLogin();
+
         // fetch and set user profile
-        Solid.identity.getProfile(webid).then(function(g) {
+        SolidPlume.identity.getProfile(webid).then((g) => {
             var profile = getUserProfile(webid, g);
             user.name = profile.name;
             user.picture = profile.picture;
@@ -267,19 +315,24 @@ Plume = (function () {
             authors[webid] = user;
             saveLocalAuthors();
             // add workspaces
-            Solid.identity.getWorkspaces(webid, g).then(function(ws){
+            SolidPlume.identity.getWorkspaces(webid, g).then((ws) => {
                 user.workspaces = ws;
                 // save to local storage and refresh page
                 saveLocalStorage();
-                window.location.reload();
-            }).catch(function(err) {
+                if (reload) {
+                  window.location.reload();
+                }
+            }).catch((err) => {
                 showError(err);
                 // save to local storage and refresh page
                 saveLocalStorage();
-                window.location.reload();
+                if (reload) {
+                  window.location.reload();
+                }
             });
         });
     };
+
 
     // get profile data for a given user
     // Returns
@@ -340,6 +393,7 @@ Plume = (function () {
         return profile;
     };
 
+
     var confirmDelete = function(url) {
         var postTitle = (posts[url].title)?'<br><p><strong>'+posts[url].title+'</strong></p>':'this post';
         var div = document.createElement('div');
@@ -377,7 +431,7 @@ Plume = (function () {
 
     var deletePost = function(url) {
         if (url) {
-            Solid.web.del(url).then(
+            SolidPlume.web.del(url).then(
                 function(done) {
                     if (done) {
                         delete posts[url];
@@ -484,6 +538,8 @@ Plume = (function () {
             return;
         }
 
+        document.querySelector('.startWrite').classList.add('hidden');
+
         // make sure we're entering in edit mode
         if (editor.isPreviewActive()) {
             togglePreview();
@@ -549,6 +605,7 @@ Plume = (function () {
         document.querySelector('.posts').classList.add('hidden');
         document.querySelector('.viewer').classList.add('hidden');
         document.querySelector('.start').classList.add('hidden');
+        document.querySelector('.startWrite').classList.add('hidden');
         document.querySelector('.editor').classList.remove('hidden');
         document.querySelector('.editor-title').focus();
         document.querySelector('.editor-author').innerHTML = user.name;
@@ -616,32 +673,42 @@ Plume = (function () {
     // save post data to server
     var savePost = function(post, url) {
         //TODO also write tags - use sioc:topic -> uri
+        var XSD = $rdf.Namespace("http://www.w3.org/2001/XMLSchema#")
         var g = new $rdf.graph();
-        g.add($rdf.sym(''), RDF('type'), SIOC('Post'));
-        g.add($rdf.sym(''), DCT('title'), $rdf.lit(post.title));
-        g.add($rdf.sym(''), SIOC('has_creator'), $rdf.sym('#author'));
-        g.add($rdf.sym(''), DCT('created'), $rdf.lit(post.created, '', $rdf.Symbol.prototype.XSDdateTime));
-        g.add($rdf.sym(''), DCT('modified'), $rdf.lit(post.modified, '', $rdf.Symbol.prototype.XSDdateTime));
-        g.add($rdf.sym(''), SIOC('content'), $rdf.lit(encodeHTML(post.body)));
+        var slug;
+        var GRAPH;
 
-        g.add($rdf.sym('#author'), RDF('type'), SIOC('UserAccount'));
-        g.add($rdf.sym('#author'), SIOC('account_of'), $rdf.sym(post.author));
-        g.add($rdf.sym('#author'), FOAF('name'), $rdf.lit(authors[post.author].name));
-        g.add($rdf.sym('#author'), SIOC('avatar'), $rdf.sym(authors[post.author].picture));
+        if (!url) {
+          GRAPH = $rdf.Namespace(config.postsURL + makeSlug(post.title) + '.ttl');
+        } else {
+          GRAPH = $rdf.Namespace(url);
+        }
+
+        g.add(GRAPH('#'), RDF('type'), SIOC('Post'));
+        g.add(GRAPH('#'), DCT('title'), $rdf.lit(post.title));
+        g.add(GRAPH('#'), SIOC('has_creator'), GRAPH('#author'));
+        g.add(GRAPH('#'), DCT('created'), $rdf.lit(post.created, '', XSD('datetime')));
+        g.add(GRAPH('#'), DCT('modified'), $rdf.lit(post.modified, '', XSD('datetime')));
+        g.add(GRAPH('#'), SIOC('content'), $rdf.lit(encodeHTML(post.body)));
+
+        g.add(GRAPH('#author'), RDF('type'), SIOC('UserAccount'));
+        g.add(GRAPH('#author'), SIOC('account_of'), $rdf.sym(post.author));
+        g.add(GRAPH('#author'), FOAF('name'), $rdf.lit(authors[post.author].name));
+//        g.add(GRAPH('#author'), SIOC('avatar'), $rdf.sym(authors[post.author].picture));
 
         var triples = new $rdf.Serializer(g).toN3(g);
 
         if (url) {
-            var writer = Solid.web.put(url, triples);
+            var writer = SolidPlume.web.put(url, triples);
         } else {
             var slug = makeSlug(post.title);
-            var writer = Solid.web.post(config.postsURL, slug, triples);
+            var writer = SolidPlume.web.post(config.postsURL, slug, triples);
         }
         writer.then(
             function(res) {
                 // all done, clean up and go to initial state
                 if (res.url.slice(0,4) !== 'http') {
-                    res.url = config.postsURL.slice(0, config.postsURL.lastIndexOf('/') + 1)+slug;
+                    res.url = config.postsURL.slice(0, config.postsURL.lastIndexOf('/') + 1)+slug + '.ttl';
                 }
                 cancelPost('?post='+encodeURIComponent(res.url));
             }
@@ -662,7 +729,7 @@ Plume = (function () {
         // clear previous posts
         postsdiv.innerHTML = '';
         // ask only for sioc:Post resources
-        Solid.web.get(url).then(
+        SolidPlume.web.get(url).then(
             function(g) {
                 var _posts = [];
                 var st = g.statementsMatching(undefined, RDF('type'), SIOC('Post'));
@@ -685,6 +752,10 @@ Plume = (function () {
                         document.querySelector('.start').classList.remove('hidden');
                     } else {
                         document.querySelector('.init').classList.remove('hidden');
+                    }
+                } else {
+                    if (user.authenticated) {
+                        document.querySelector('.startWrite').classList.remove('hidden');
                     }
                 }
 
@@ -749,7 +820,7 @@ Plume = (function () {
                 });
 
                 // setup WebSocket listener since we are sure we have posts in this container
-                Solid.web.head(url).then(function(meta) {
+                SolidPlume.web.head(url).then(function(meta) {
                     if (meta.websocket.length > 0) {
                         socketSubscribe(meta.websocket, url);
                     }
@@ -769,7 +840,7 @@ Plume = (function () {
 
     var fetchPost = function(url) {
         var promise = new Promise(function(resolve, reject){
-            Solid.web.get(url).then(
+            SolidPlume.web.get(url).then(
                 function(g) {
                     var subject = g.any(undefined, RDF('type'), SIOC('Post'));
 
@@ -866,7 +937,7 @@ Plume = (function () {
             return;
         }
         authors[webid].lock = true;
-        Solid.identity.getProfile(webid).
+        SolidPlume.identity.getProfile(webid).
         then(function(g) {
             var profile = getUserProfile(webid, g);
             if (len(profile) > 0) {
@@ -879,6 +950,7 @@ Plume = (function () {
                 authors[webid].lock = false;
                 if (url && posts[url]) {
                     var postId = document.getElementById(url);
+
                     if (profile.name && postId) {
                         postId.querySelector('.post-author').innerHTML = profile.name;
                         postId.querySelector('.post-avatar').title = profile.name+"'s picture";
@@ -931,15 +1003,18 @@ Plume = (function () {
         article.appendChild(header);
 
         // set avatar
+//??
+/***
         var avatar = document.createElement('img');
         avatar.classList.add('post-avatar');
         avatar.src = picture;
         avatar.alt = avatar.title = name+"'s picture";
+***/
         // append picture to header
         var avatarLink = document.createElement('a');
         avatarLink.href = post.author;
         avatarLink.setAttribute('target', '_blank');
-        avatarLink.appendChild(avatar);
+//??        avatarLink.appendChild(avatar);
         header.appendChild(avatarLink);
 
         // add meta data
@@ -1247,7 +1322,7 @@ Plume = (function () {
                     replace(/-*$/, '').
                     replace(/[^A-Za-z0-9-]/g, '').
                     toLowerCase();
-        str += '.ttl';
+//??        str += '.ttl';
 	return str;
     };
 
@@ -1295,6 +1370,8 @@ Plume = (function () {
         }
         hideLoading();
         document.querySelector('.init').classList.add('hidden');
+        document.querySelector('.start').classList.add('hidden');
+        document.querySelector('.startWrite').classList.add('hidden');
         document.querySelector('.editor').classList.add('hidden');
         document.querySelector('.viewer').classList.add('hidden');
         document.querySelector('.viewer').innerHTML = '';
@@ -1306,7 +1383,13 @@ Plume = (function () {
             } else {
                 document.querySelector('.init').classList.remove('hidden');
             }
+        } else {
+            if (user.authenticated) {
+                document.querySelector('.startWrite').classList.remove('hidden');
+            }
         }
+
+        
         if (refresh) {
             showBlog(config.postsURL);
         } else {
@@ -1450,15 +1533,14 @@ Plume = (function () {
     // ----- INIT -----
     // start app by loading the config file
     applyConfig();
-    var http = new XMLHttpRequest();
-    http.open('get', 'config.json');
-    http.onreadystatechange = function() {
-        if (this.readyState == this.DONE) {
-            init(JSON.parse(this.response));
-        }
-    };
-    http.send();
-
+    fetch('/plume/config.json')
+       .then(resp => {
+         if (resp.ok) {
+           resp.text().then(text => {
+             init(JSON.parse(text));
+           })
+         }
+       })
 
 
     // return public functions
@@ -1550,5 +1632,6 @@ Plume.menu = (function() {
         forceClose: forceClose
     }
 })();
+
 Plume.menu.init();
 
