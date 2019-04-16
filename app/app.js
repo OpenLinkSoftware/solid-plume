@@ -5,7 +5,7 @@ var Plume = Plume || {};
 Plume = (function () {
     'use strict';
 
-    const popupUri = window.origin + '/popup.html'
+    const popupUri = window.origin + '/solid-plume/popup.html'
 
     var config = Plume.config || {};
     var appURL = window.location.origin+window.location.pathname;
@@ -1533,7 +1533,7 @@ Plume = (function () {
     // ----- INIT -----
     // start app by loading the config file
     applyConfig();
-    fetch('/plume/config.json')
+    fetch('config.json')
        .then(resp => {
          if (resp.ok) {
            resp.text().then(text => {
